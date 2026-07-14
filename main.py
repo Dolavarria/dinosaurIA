@@ -9,6 +9,7 @@ pygame.init()
 SCREEN_HEIGHT = 600
 SCREEN_WIDTH = 1100
 SCREEN = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+FONT = pygame.font.Font("freesansbold.ttf", 20)
 
 RUNNING = [
     pygame.image.load(os.path.join("Assets/Dino", "DinoRun1.png")),
@@ -197,6 +198,30 @@ def main():
         x_pos_bg -= game_speed
 
     # Esta es la función que NEAT llamará en cada generación
+
+
+def score():
+    global points, game_speed
+    points += 1
+    # Cada 100 frames, el juego se vuelve más rápido
+    if points % 100 == 0:
+        game_speed += 1
+
+    text = FONT.render("Points: " + str(points), True, (0, 0, 0))
+    textRect = text.get_rect()
+    textRect.center = (1000, 40)
+    SCREEN.blit(text, textRect)
+
+
+def background():
+    global x_pos_bg, y_pos_bg, game_speed
+    image_width = BG.get_width()
+    SCREEN.blit(BG, (x_pos_bg, y_pos_bg))
+    SCREEN.blit(BG, (image_width + x_pos_bg, y_pos_bg))
+    if x_pos_bg <= -image_width:
+        SCREEN.blit(BG, (image_width + x_pos_bg, y_pos_bg))
+        x_pos_bg = 0
+    x_pos_bg -= game_speed
 
 
 def eval_genomes(genomes, config):
