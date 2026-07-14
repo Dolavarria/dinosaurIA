@@ -39,7 +39,6 @@ BIRD = [
 ]
 
 CLOUD = pygame.image.load(os.path.join("Assets/Other", "Cloud.png"))
-
 BG = pygame.image.load(os.path.join("Assets/Other", "Track.png"))
 
 
@@ -164,43 +163,6 @@ class Bird(Obstacle):
         self.index += 1
 
 
-def main():
-    global game_speed, x_pos_bg, y_pos_bg, points, obstacles
-    run = True
-    clock = pygame.time.Clock()
-    cloud = Cloud()
-    game_speed = 20
-    x_pos_bg = 0
-    y_pos_bg = 380
-    points = 0
-    font = pygame.font.Font("freesansbold.ttf", 20)
-    obstacles = []
-    death_count = 0
-
-    def score():
-        global points, game_speed
-        points += 1
-        if points % 100 == 0:
-            game_speed += 1
-
-        text = font.render("Points: " + str(points), True, (0, 0, 0))
-        textRect = text.get_rect()
-        textRect.center = (1000, 40)
-        SCREEN.blit(text, textRect)
-
-    def background():
-        global x_pos_bg, y_pos_bg
-        image_width = BG.get_width()
-        SCREEN.blit(BG, (x_pos_bg, y_pos_bg))
-        SCREEN.blit(BG, (image_width + x_pos_bg, y_pos_bg))
-        if x_pos_bg <= -image_width:
-            SCREEN.blit(BG, (image_width + x_pos_bg, y_pos_bg))
-            x_pos_bg = 0
-        x_pos_bg -= game_speed
-
-    # Esta es la función que NEAT llamará en cada generación
-
-
 def score():
     global points, game_speed
     points += 1
@@ -226,7 +188,6 @@ def background():
 
 
 def eval_genomes(genomes, config):
-    # Declaramos las variables globales para que el fondo y el puntaje funcionen
     global game_speed, x_pos_bg, y_pos_bg, points, obstacles
     game_speed = 20
     x_pos_bg = 0
@@ -257,7 +218,7 @@ def eval_genomes(genomes, config):
 
         SCREEN.fill((255, 255, 255))
 
-        # Generación de obstáculos (Debe ir ANTES de calcular la visión)
+        # Generación de obstáculos
         if len(obstacles) == 0:
             if random.randint(0, 2) == 0:
                 obstacles.append(SmallCactus(SMALL_CACTUS))
@@ -268,10 +229,10 @@ def eval_genomes(genomes, config):
 
         for x, dino in enumerate(dinosaurios):
             dino.draw(SCREEN)
-            dino.update()  # Ya no pasamos el teclado aquí
+            dino.update()
             genomas[x].fitness += 0.1
 
-            # --- LA VISIÓN ---
+            # Visión
             if len(obstacles) > 0:
                 distancia_obstaculo = obstacles[0].rect.x - dino.dino_rect.x
                 altura_obstaculo = obstacles[0].rect.y
@@ -279,25 +240,23 @@ def eval_genomes(genomes, config):
                 distancia_obstaculo = 1000
                 altura_obstaculo = 0
 
-            # --- EL CEREBRO ---
+            # Cerebro
             output = redes_neuronales[x].activate(
                 (dino.dino_rect.y, distancia_obstaculo, altura_obstaculo)
             )
 
-            # Si la IA decide saltar (> 0.5) y no está ya saltando
+            # Acción
             if output[0] > 0.5 and not dino.dino_jump:
                 dino.dino_jump = True
                 dino.dino_run = False
-            # Si no está saltando (o ya aterrizó), nos aseguramos de que siga corriendo
             elif not dino.dino_jump:
                 dino.dino_run = True
 
-        # 5. Lógica de colisión corregida
+        # Lógica de colisión
         for obstacle in obstacles:
             obstacle.draw(SCREEN)
             obstacle.update()
 
-            # Iteramos la lista de dinosaurios al revés
             for x in range(len(dinosaurios) - 1, -1, -1):
                 if dinosaurios[x].dino_rect.colliderect(obstacle.rect):
                     genomas[x].fitness -= 1
@@ -306,41 +265,13 @@ def eval_genomes(genomes, config):
                     genomas.pop(x)
 
         background()
-        cloud = Cloud()  # Instanciamos la nube temporalmente para que no falle
+        cloud = Cloud()
         cloud.draw(SCREEN)
         cloud.update()
         score()
 
         clock.tick(30)
         pygame.display.update()
-
-
-def menu(death_count):
-    global points
-    run = True
-    while run:
-        SCREEN.fill((255, 255, 255))
-        font = pygame.font.Font("freesansbold.ttf", 30)
-
-        if death_count == 0:
-            text = font.render("Press any Key to Start", True, (0, 0, 0))
-        elif death_count > 0:
-            text = font.render("Press any Key to Restart", True, (0, 0, 0))
-            score = font.render("Your Score: " + str(points), True, (0, 0, 0))
-            scoreRect = score.get_rect()
-            scoreRect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50)
-            SCREEN.blit(score, scoreRect)
-        textRect = text.get_rect()
-        textRect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-        SCREEN.blit(text, textRect)
-        SCREEN.blit(RUNNING[0], (SCREEN_WIDTH // 2 - 20, SCREEN_HEIGHT // 2 - 140))
-        pygame.display.update()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                run = False
-            if event.type == pygame.KEYDOWN:
-                main()
 
 
 def run(config_path):
@@ -352,34 +283,26 @@ def run(config_path):
         config_path,
     )
 
-    # Crear la población inicial
     pop = neat.Population(config)
 
-    # Reporteros para ver datos en la terminal
     pop.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     pop.add_reporter(stats)
 
-    # --- NUEVO: EL CHECKPOINT AUTOMÁTICO ---
-    # Esto creará un archivo llamado "neat-checkpoint-X" cada 5 generaciones
+    # Checkpoint automático (cada 5 generaciones)
     pop.add_reporter(neat.Checkpointer(5))
 
     # Iniciar el entrenamiento
     winner = pop.run(eval_genomes, 50)
 
-    # --- NUEVO: GUARDAR AL CAMPEÓN DEFINITIVO ---
-    # Cuando un dinosaurio gane, guardamos su cerebro en un archivo físico
+    # Guardar al campeón definitivo
     print("\n¡Entrenamiento finalizado!")
     with open("campeon.pkl", "wb") as f:
         pickle.dump(winner, f)
         print("Cerebro del mejor dinosaurio guardado exitosamente como 'campeon.pkl'")
 
 
-# Punto de entrada del script
 if __name__ == "__main__":
-    # Buscar la ruta exacta donde está el archivo config-feedforward.txt
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, "config-feedforward.txt")
-
-    # Ejecutar el programa
     run(config_path)
