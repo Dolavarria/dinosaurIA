@@ -1,6 +1,8 @@
 import pygame
 import os
 import random
+import neat
+
 pygame.init()
 
 # Global Constants
@@ -8,21 +10,31 @@ SCREEN_HEIGHT = 600
 SCREEN_WIDTH = 1100
 SCREEN = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
-RUNNING = [pygame.image.load(os.path.join("Assets/Dino", "DinoRun1.png")),
-           pygame.image.load(os.path.join("Assets/Dino", "DinoRun2.png"))]
+RUNNING = [
+    pygame.image.load(os.path.join("Assets/Dino", "DinoRun1.png")),
+    pygame.image.load(os.path.join("Assets/Dino", "DinoRun2.png")),
+]
 JUMPING = pygame.image.load(os.path.join("Assets/Dino", "DinoJump.png"))
-DUCKING = [pygame.image.load(os.path.join("Assets/Dino", "DinoDuck1.png")),
-           pygame.image.load(os.path.join("Assets/Dino", "DinoDuck2.png"))]
+DUCKING = [
+    pygame.image.load(os.path.join("Assets/Dino", "DinoDuck1.png")),
+    pygame.image.load(os.path.join("Assets/Dino", "DinoDuck2.png")),
+]
 
-SMALL_CACTUS = [pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus1.png")),
-                pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus2.png")),
-                pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus3.png"))]
-LARGE_CACTUS = [pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus1.png")),
-                pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus2.png")),
-                pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus3.png"))]
+SMALL_CACTUS = [
+    pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus1.png")),
+    pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus2.png")),
+    pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus3.png")),
+]
+LARGE_CACTUS = [
+    pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus1.png")),
+    pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus2.png")),
+    pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus3.png")),
+]
 
-BIRD = [pygame.image.load(os.path.join("Assets/Bird", "Bird1.png")),
-        pygame.image.load(os.path.join("Assets/Bird", "Bird2.png"))]
+BIRD = [
+    pygame.image.load(os.path.join("Assets/Bird", "Bird1.png")),
+    pygame.image.load(os.path.join("Assets/Bird", "Bird2.png")),
+]
 
 CLOUD = pygame.image.load(os.path.join("Assets/Other", "Cloud.png"))
 
@@ -51,7 +63,7 @@ class Dinosaur:
         self.dino_rect.x = self.X_POS
         self.dino_rect.y = self.Y_POS
 
-    def update(self, userInput):
+    def update(self):
         if self.dino_duck:
             self.duck()
         if self.dino_run:
@@ -61,19 +73,6 @@ class Dinosaur:
 
         if self.step_index >= 10:
             self.step_index = 0
-
-        if userInput[pygame.K_UP] and not self.dino_jump:
-            self.dino_duck = False
-            self.dino_run = False
-            self.dino_jump = True
-        elif userInput[pygame.K_DOWN] and not self.dino_jump:
-            self.dino_duck = True
-            self.dino_run = False
-            self.dino_jump = False
-        elif not (self.dino_jump or userInput[pygame.K_DOWN]):
-            self.dino_duck = False
-            self.dino_run = True
-            self.dino_jump = False
 
     def duck(self):
         self.image = self.duck_img[self.step_index // 5]
@@ -94,7 +93,7 @@ class Dinosaur:
         if self.dino_jump:
             self.dino_rect.y -= self.jump_vel * 4
             self.jump_vel -= 0.8
-        if self.jump_vel < - self.JUMP_VEL:
+        if self.jump_vel < -self.JUMP_VEL:
             self.dino_jump = False
             self.jump_vel = self.JUMP_VEL
 
@@ -159,7 +158,7 @@ class Bird(Obstacle):
     def draw(self, SCREEN):
         if self.index >= 9:
             self.index = 0
-        SCREEN.blit(self.image[self.index//5], self.rect)
+        SCREEN.blit(self.image[self.index // 5], self.rect)
         self.index += 1
 
 
@@ -167,13 +166,12 @@ def main():
     global game_speed, x_pos_bg, y_pos_bg, points, obstacles
     run = True
     clock = pygame.time.Clock()
-    player = Dinosaur()
     cloud = Cloud()
     game_speed = 20
     x_pos_bg = 0
     y_pos_bg = 380
     points = 0
-    font = pygame.font.Font('freesansbold.ttf', 20)
+    font = pygame.font.Font("freesansbold.ttf", 20)
     obstacles = []
     death_count = 0
 
@@ -198,17 +196,42 @@ def main():
             x_pos_bg = 0
         x_pos_bg -= game_speed
 
-    while run:
+    # Esta es la función que NEAT llamará en cada generación
+
+
+def eval_genomes(genomes, config):
+    # Declaramos las variables globales para que el fondo y el puntaje funcionen
+    global game_speed, x_pos_bg, y_pos_bg, points, obstacles
+    game_speed = 20
+    x_pos_bg = 0
+    y_pos_bg = 380
+    points = 0
+    obstacles = []
+
+    dinosaurios = []
+    redes_neuronales = []
+    genomas = []
+
+    for genome_id, genome in genomes:
+        genome.fitness = 0
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        redes_neuronales.append(net)
+        dinosaurios.append(Dinosaur())
+        genomas.append(genome)
+
+    clock = pygame.time.Clock()
+    run = True
+
+    while run and len(dinosaurios) > 0:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
+                pygame.quit()
+                quit()
 
         SCREEN.fill((255, 255, 255))
-        userInput = pygame.key.get_pressed()
 
-        player.draw(SCREEN)
-        player.update(userInput)
-
+        # Generación de obstáculos (Debe ir ANTES de calcular la visión)
         if len(obstacles) == 0:
             if random.randint(0, 2) == 0:
                 obstacles.append(SmallCactus(SMALL_CACTUS))
@@ -217,19 +240,49 @@ def main():
             elif random.randint(0, 2) == 2:
                 obstacles.append(Bird(BIRD))
 
+        for x, dino in enumerate(dinosaurios):
+            dino.draw(SCREEN)
+            dino.update()  # Ya no pasamos el teclado aquí
+            genomas[x].fitness += 0.1
+
+            # --- LA VISIÓN ---
+            if len(obstacles) > 0:
+                distancia_obstaculo = obstacles[0].rect.x - dino.dino_rect.x
+                altura_obstaculo = obstacles[0].rect.y
+            else:
+                distancia_obstaculo = 1000
+                altura_obstaculo = 0
+
+            # --- EL CEREBRO ---
+            output = redes_neuronales[x].activate(
+                (dino.dino_rect.y, distancia_obstaculo, altura_obstaculo)
+            )
+
+            # Si la IA decide saltar (> 0.5) y no está ya saltando
+            if output[0] > 0.5 and not dino.dino_jump:
+                dino.dino_jump = True
+                dino.dino_run = False
+            # Si no está saltando (o ya aterrizó), nos aseguramos de que siga corriendo
+            elif not dino.dino_jump:
+                dino.dino_run = True
+
+        # 5. Lógica de colisión corregida
         for obstacle in obstacles:
             obstacle.draw(SCREEN)
             obstacle.update()
-            if player.dino_rect.colliderect(obstacle.rect):
-                pygame.time.delay(2000)
-                death_count += 1
-                menu(death_count)
+
+            # Iteramos la lista de dinosaurios al revés
+            for x in range(len(dinosaurios) - 1, -1, -1):
+                if dinosaurios[x].dino_rect.colliderect(obstacle.rect):
+                    genomas[x].fitness -= 1
+                    dinosaurios.pop(x)
+                    redes_neuronales.pop(x)
+                    genomas.pop(x)
 
         background()
-
+        cloud = Cloud()  # Instanciamos la nube temporalmente para que no falle
         cloud.draw(SCREEN)
         cloud.update()
-
         score()
 
         clock.tick(30)
@@ -241,7 +294,7 @@ def menu(death_count):
     run = True
     while run:
         SCREEN.fill((255, 255, 255))
-        font = pygame.font.Font('freesansbold.ttf', 30)
+        font = pygame.font.Font("freesansbold.ttf", 30)
 
         if death_count == 0:
             text = font.render("Press any Key to Start", True, (0, 0, 0))
@@ -264,4 +317,38 @@ def menu(death_count):
                 main()
 
 
-menu(death_count=0)
+def run(config_path):
+    # 1. Cargar la configuración de NEAT desde el archivo de texto
+    config = neat.config.Config(
+        neat.DefaultGenome,
+        neat.DefaultReproduction,
+        neat.DefaultSpeciesSet,
+        neat.DefaultStagnation,
+        config_path,
+    )
+
+    # 2. Crear la población inicial (los primeros 50 dinos aleatorios)
+    pop = neat.Population(config)
+
+    # 3. Agregar "reporteros" para ver las estadísticas en la terminal
+    pop.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    pop.add_reporter(stats)
+
+    # 4. INICIAR EL ENTRENAMIENTO
+    # Llama a tu función eval_genomes y corre por un máximo de 50 generaciones
+    winner = pop.run(eval_genomes, 50)
+
+    # Cuando termine, imprime los datos del mejor dinosaurio
+    print("\n¡Entrenamiento finalizado!")
+    print("Mejor genoma encontrado:\n{!s}".format(winner))
+
+
+# Punto de entrada del script
+if __name__ == "__main__":
+    # Buscar la ruta exacta donde está el archivo config-feedforward.txt
+    local_dir = os.path.dirname(__file__)
+    config_path = os.path.join(local_dir, "config-feedforward.txt")
+
+    # Ejecutar el programa
+    run(config_path)
