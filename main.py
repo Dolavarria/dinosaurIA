@@ -2,6 +2,7 @@ import pygame
 import os
 import random
 import neat
+import pickle
 
 pygame.init()
 
@@ -343,7 +344,6 @@ def menu(death_count):
 
 
 def run(config_path):
-    # 1. Cargar la configuración de NEAT desde el archivo de texto
     config = neat.config.Config(
         neat.DefaultGenome,
         neat.DefaultReproduction,
@@ -352,21 +352,27 @@ def run(config_path):
         config_path,
     )
 
-    # 2. Crear la población inicial (los primeros 50 dinos aleatorios)
+    # Crear la población inicial
     pop = neat.Population(config)
 
-    # 3. Agregar "reporteros" para ver las estadísticas en la terminal
+    # Reporteros para ver datos en la terminal
     pop.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     pop.add_reporter(stats)
 
-    # 4. INICIAR EL ENTRENAMIENTO
-    # Llama a tu función eval_genomes y corre por un máximo de 50 generaciones
+    # --- NUEVO: EL CHECKPOINT AUTOMÁTICO ---
+    # Esto creará un archivo llamado "neat-checkpoint-X" cada 5 generaciones
+    pop.add_reporter(neat.Checkpointer(5))
+
+    # Iniciar el entrenamiento
     winner = pop.run(eval_genomes, 50)
 
-    # Cuando termine, imprime los datos del mejor dinosaurio
+    # --- NUEVO: GUARDAR AL CAMPEÓN DEFINITIVO ---
+    # Cuando un dinosaurio gane, guardamos su cerebro en un archivo físico
     print("\n¡Entrenamiento finalizado!")
-    print("Mejor genoma encontrado:\n{!s}".format(winner))
+    with open("campeon.pkl", "wb") as f:
+        pickle.dump(winner, f)
+        print("Cerebro del mejor dinosaurio guardado exitosamente como 'campeon.pkl'")
 
 
 # Punto de entrada del script
