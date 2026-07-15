@@ -128,8 +128,10 @@ class Obstacle:
 
     def update(self):
         self.rect.x -= game_speed
-        if self.rect.x < -self.rect.width:
-            obstacles.pop()
+
+    def is_off_screen(self):
+        """Retorna True si el obstáculo salió de la pantalla."""
+        return self.rect.x < -self.rect.width
 
     def draw(self, SCREEN):
         SCREEN.blit(self.image[self.type], self.rect)
@@ -168,7 +170,7 @@ def score():
     points += 1
     # Cada 100 frames, el juego se vuelve más rápido
     if points % 100 == 0:
-        game_speed += 1
+        game_speed += 2
 
     text = FONT.render("Points: " + str(points), True, (0, 0, 0))
     textRect = text.get_rect()
@@ -194,6 +196,7 @@ def eval_genomes(genomes, config):
     y_pos_bg = 380
     points = 0
     obstacles = []
+    cloud = Cloud()
 
     dinosaurios = []
     redes_neuronales = []
@@ -220,17 +223,17 @@ def eval_genomes(genomes, config):
 
         # Generación de obstáculos
         if len(obstacles) == 0:
-            if random.randint(0, 2) == 0:
+            obstacle_type = random.randint(0, 2)
+            if obstacle_type == 0:
                 obstacles.append(SmallCactus(SMALL_CACTUS))
-            elif random.randint(0, 2) == 1:
+            elif obstacle_type == 1:
                 obstacles.append(LargeCactus(LARGE_CACTUS))
-            elif random.randint(0, 2) == 2:
+            elif obstacle_type == 2:
                 obstacles.append(Bird(BIRD))
 
         for x, dino in enumerate(dinosaurios):
             dino.draw(SCREEN)
             dino.update()
-            genomas[x].fitness += 0.1
 
             # Visión
             if len(obstacles) > 0:
@@ -240,9 +243,19 @@ def eval_genomes(genomes, config):
                 distancia_obstaculo = 1000
                 altura_obstaculo = 0
 
+            # Normalizar entradas para mejor aprendizaje
+            # Rango: [0, 1]
+            dino_y_norm = dino.dino_rect.y / SCREEN_HEIGHT
+            distancia_norm = min(distancia_obstaculo / 1000, 1.0)  # Normalizar a ~1
+            altura_norm = altura_obstaculo / SCREEN_HEIGHT
+            speed_norm = game_speed / 50  # Rango típico es ~20-60
+
+            # Recompensa por avanzar en el juego
+            genomas[x].fitness += 0.1
+
             # Cerebro
             output = redes_neuronales[x].activate(
-                (dino.dino_rect.y, distancia_obstaculo, altura_obstaculo)
+                (dino_y_norm, distancia_norm, altura_norm, speed_norm)
             )
 
             # Acción
@@ -253,9 +266,14 @@ def eval_genomes(genomes, config):
                 dino.dino_run = True
 
         # Lógica de colisión
-        for obstacle in obstacles:
+        obstacles_to_remove = []
+        for i, obstacle in enumerate(obstacles):
             obstacle.draw(SCREEN)
             obstacle.update()
+
+            # Marcar obstáculos que salieron de pantalla
+            if obstacle.is_off_screen():
+                obstacles_to_remove.append(i)
 
             for x in range(len(dinosaurios) - 1, -1, -1):
                 if dinosaurios[x].dino_rect.colliderect(obstacle.rect):
@@ -264,8 +282,11 @@ def eval_genomes(genomes, config):
                     redes_neuronales.pop(x)
                     genomas.pop(x)
 
+        # Limpiar obstáculos off-screen al final del loop
+        for i in reversed(obstacles_to_remove):
+            obstacles.pop(i)
+
         background()
-        cloud = Cloud()
         cloud.draw(SCREEN)
         cloud.update()
         score()
@@ -283,7 +304,14 @@ def run(config_path):
         config_path,
     )
 
-    pop = neat.Population(config)
+    # Cargar desde checkpoint SI EXISTE, si no crear población nueva
+    checkpoint_file = "neat-checkpoint-25"
+    if os.path.exists(checkpoint_file):
+        pop = neat.Checkpointer.restore_checkpoint(checkpoint_file)
+        print(f"Cargado checkpoint: {checkpoint_file}")
+    else:
+        pop = neat.Population(config)
+        print("Iniciando entrenamiento desde cero (población nueva)")
 
     pop.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()

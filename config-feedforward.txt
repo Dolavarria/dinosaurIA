@@ -1,7 +1,7 @@
 [NEAT]
 fitness_criterion     = max
-fitness_threshold     = 1000
-pop_size              = 50
+fitness_threshold     = 250
+pop_size              = 300
 reset_on_extinction   = False
 no_fitness_termination = False
 
@@ -46,7 +46,7 @@ node_delete_prob        = 0.2
 
 # Parámetros de la Red (¡Aquí están nuestros Inputs y Outputs!)
 num_hidden              = 0
-num_inputs              = 3
+num_inputs              = 4
 num_outputs             = 1
 
 # Opciones de respuesta del nodo
