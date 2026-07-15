@@ -3,6 +3,7 @@ import os
 import random
 import neat
 import pickle
+import csv
 
 pygame.init()
 
@@ -40,6 +41,94 @@ BIRD = [
 
 CLOUD = pygame.image.load(os.path.join("Assets/Other", "Cloud.png"))
 BG = pygame.image.load(os.path.join("Assets/Other", "Track.png"))
+
+
+class MetricsLogger:
+    """Clase para guardar métricas de entrenamiento en CSV"""
+
+    def __init__(self, filename="training_metrics.csv"):
+        self.filename = filename
+        self.file = open(filename, "w", newline="")
+        self.writer = csv.writer(self.file)
+
+        # Escribir encabezado (nombre de columnas)
+        self.writer.writerow(
+            [
+                "generation",
+                "best_fitness",
+                "avg_fitness",
+                "median_fitness",
+                "min_fitness",
+                "max_fitness",
+                "num_species",
+                "population_size",
+            ]
+        )
+        self.file.flush()
+
+    def log_generation(self, gen, best, avg, median, min_f, max_f, species, pop_size):
+        """Guardar métricas de una generación"""
+        self.writer.writerow(
+            [
+                gen,
+                f"{best:.2f}",
+                f"{avg:.2f}",
+                f"{median:.2f}",
+                f"{min_f:.2f}",
+                f"{max_f:.2f}",
+                species,
+                pop_size,
+            ]
+        )
+        self.file.flush()
+
+    def close(self):
+        """Cerrar el archivo"""
+        self.file.close()
+        print(f"Métricas guardadas en: {self.filename}")
+
+
+class GenerationMetricsReporter(neat.reporting.BaseReporter):
+    """Reporter personalizado para NEAT que guarda métricas"""
+
+    def __init__(self, logger):
+        self.logger = logger
+        self.generation = 0
+
+    def end_generation(self, config, population, species_set):
+        """Se ejecuta al final de cada generación"""
+        # Obtener fitness de todos los genomas (solo los que fueron evaluados)
+        fitnesses = [g.fitness for g in population.values() if g.fitness is not None]
+
+        # Si no hay fitnesses válidas, retornar sin guardar
+        if not fitnesses:
+            self.generation += 1
+            return
+
+        # Calcular estadísticas
+        best = max(fitnesses)
+        avg = sum(fitnesses) / len(fitnesses)
+        median = sorted(fitnesses)[len(fitnesses) // 2]
+        min_f = min(fitnesses)
+        max_f = max(fitnesses)
+
+        # Número de especies y tamaño de población
+        num_species = len(species_set.species)
+        pop_size = len(population)
+
+        # Guardar en CSV
+        self.logger.log_generation(
+            gen=self.generation,
+            best=best,
+            avg=avg,
+            median=median,
+            min_f=min_f,
+            max_f=max_f,
+            species=num_species,
+            pop_size=pop_size,
+        )
+
+        self.generation += 1
 
 
 class Dinosaur:
@@ -317,11 +406,18 @@ def run(config_path):
     stats = neat.StatisticsReporter()
     pop.add_reporter(stats)
 
+    # Crear logger de métricas y agregarlo como reporter
+    metrics_logger = MetricsLogger("training_metrics.csv")
+    pop.add_reporter(GenerationMetricsReporter(metrics_logger))
+
     # Checkpoint automático (cada 5 generaciones)
     pop.add_reporter(neat.Checkpointer(5))
 
     # Iniciar el entrenamiento
     winner = pop.run(eval_genomes, 50)
+
+    # Cerrar el logger de métricas
+    metrics_logger.close()
 
     # Guardar al campeón definitivo
     print("\n¡Entrenamiento finalizado!")
