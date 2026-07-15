@@ -1,6 +1,7 @@
 import pygame
 import os
 import random
+import glob
 import neat
 import pickle
 import csv
@@ -48,11 +49,10 @@ class MetricsLogger:
 
     def __init__(self, filename="training_metrics.csv"):
         self.filename = filename
-        self.file = open(filename, "w", newline="")
-        self.writer = csv.writer(self.file)
+        self.header_written = os.path.exists(filename) and os.path.getsize(filename) > 0
 
-        # Escribir encabezado (nombre de columnas)
-        self.writer.writerow(
+    def _write_header(self, writer):
+        writer.writerow(
             [
                 "generation",
                 "best_fitness",
@@ -64,27 +64,31 @@ class MetricsLogger:
                 "population_size",
             ]
         )
-        self.file.flush()
 
     def log_generation(self, gen, best, avg, median, min_f, max_f, species, pop_size):
         """Guardar métricas de una generación"""
-        self.writer.writerow(
-            [
-                gen,
-                f"{best:.2f}",
-                f"{avg:.2f}",
-                f"{median:.2f}",
-                f"{min_f:.2f}",
-                f"{max_f:.2f}",
-                species,
-                pop_size,
-            ]
-        )
-        self.file.flush()
+        with open(self.filename, "a", newline="") as file:
+            writer = csv.writer(file)
+
+            if not self.header_written:
+                self._write_header(writer)
+                self.header_written = True
+
+            writer.writerow(
+                [
+                    gen,
+                    f"{best:.2f}",
+                    f"{avg:.2f}",
+                    f"{median:.2f}",
+                    f"{min_f:.2f}",
+                    f"{max_f:.2f}",
+                    species,
+                    pop_size,
+                ]
+            )
 
     def close(self):
         """Cerrar el archivo"""
-        self.file.close()
         print(f"Métricas guardadas en: {self.filename}")
 
 
@@ -181,11 +185,12 @@ class Dinosaur:
     def jump(self):
         self.image = self.jump_img
         if self.dino_jump:
-            self.dino_rect.y -= self.jump_vel * 4
+            self.dino_rect.y -= int(self.jump_vel * 4)
             self.jump_vel -= 0.8
         if self.jump_vel < -self.JUMP_VEL:
             self.dino_jump = False
             self.jump_vel = self.JUMP_VEL
+            self.dino_rect.y = self.Y_POS
 
     def draw(self, SCREEN):
         SCREEN.blit(self.image, (self.dino_rect.x, self.dino_rect.y))
@@ -198,7 +203,7 @@ class Cloud:
         self.image = CLOUD
         self.width = self.image.get_width()
 
-    def update(self):
+    def update(self, game_speed):
         self.x -= game_speed
         if self.x < -self.width:
             self.x = SCREEN_WIDTH + random.randint(2500, 3000)
@@ -215,7 +220,7 @@ class Obstacle:
         self.rect = self.image[self.type].get_rect()
         self.rect.x = SCREEN_WIDTH
 
-    def update(self):
+    def update(self, game_speed):
         self.rect.x -= game_speed
 
     def is_off_screen(self):
@@ -241,10 +246,16 @@ class LargeCactus(Obstacle):
 
 
 class Bird(Obstacle):
+    # Alturas variables para que agacharse sea necesario
+    # Bajo (270): el dino DEBE agacharse (colisiona corriendo, no agachado)
+    # Suelo (320): el dino DEBE saltar (colisiona siempre, agacharse no ayuda)
+    # Alto (200): decorativo, no colisiona con el dino
+    BIRD_HEIGHTS = [270, 320, 200]
+
     def __init__(self, image):
         self.type = 0
         super().__init__(image, self.type)
-        self.rect.y = 250
+        self.rect.y = random.choice(self.BIRD_HEIGHTS)
         self.index = 0
 
     def draw(self, SCREEN):
@@ -254,38 +265,36 @@ class Bird(Obstacle):
         self.index += 1
 
 
-def score():
-    global points, game_speed
-    points += 1
-    # Cada 100 frames, el juego se vuelve más rápido
-    if points % 100 == 0:
-        game_speed += 2
+class Game:
+    def __init__(self):
+        self.speed = 20
+        self.x_pos_bg = 0
+        self.y_pos_bg = 380
+        self.points = 0
+        self.obstacles = []
+        self.cloud = Cloud()
 
-    text = FONT.render("Points: " + str(points), True, (0, 0, 0))
-    textRect = text.get_rect()
-    textRect.center = (1000, 40)
-    SCREEN.blit(text, textRect)
+    def score(self):
+        self.points += 1
+        if self.points % 100 == 0:
+            self.speed += 2
+        text = FONT.render("Points: " + str(self.points), True, (0, 0, 0))
+        textRect = text.get_rect()
+        textRect.center = (1000, 40)
+        SCREEN.blit(text, textRect)
 
-
-def background():
-    global x_pos_bg, y_pos_bg, game_speed
-    image_width = BG.get_width()
-    SCREEN.blit(BG, (x_pos_bg, y_pos_bg))
-    SCREEN.blit(BG, (image_width + x_pos_bg, y_pos_bg))
-    if x_pos_bg <= -image_width:
-        SCREEN.blit(BG, (image_width + x_pos_bg, y_pos_bg))
-        x_pos_bg = 0
-    x_pos_bg -= game_speed
+    def background(self):
+        image_width = BG.get_width()
+        SCREEN.blit(BG, (self.x_pos_bg, self.y_pos_bg))
+        SCREEN.blit(BG, (image_width + self.x_pos_bg, self.y_pos_bg))
+        if self.x_pos_bg <= -image_width:
+            SCREEN.blit(BG, (image_width + self.x_pos_bg, self.y_pos_bg))
+            self.x_pos_bg = 0
+        self.x_pos_bg -= self.speed
 
 
 def eval_genomes(genomes, config):
-    global game_speed, x_pos_bg, y_pos_bg, points, obstacles
-    game_speed = 20
-    x_pos_bg = 0
-    y_pos_bg = 380
-    points = 0
-    obstacles = []
-    cloud = Cloud()
+    game = Game()
 
     dinosaurios = []
     redes_neuronales = []
@@ -311,54 +320,73 @@ def eval_genomes(genomes, config):
         SCREEN.fill((255, 255, 255))
 
         # Generación de obstáculos
-        if len(obstacles) == 0:
+        if len(game.obstacles) == 0:
             obstacle_type = random.randint(0, 2)
             if obstacle_type == 0:
-                obstacles.append(SmallCactus(SMALL_CACTUS))
+                game.obstacles.append(SmallCactus(SMALL_CACTUS))
             elif obstacle_type == 1:
-                obstacles.append(LargeCactus(LARGE_CACTUS))
+                game.obstacles.append(LargeCactus(LARGE_CACTUS))
             elif obstacle_type == 2:
-                obstacles.append(Bird(BIRD))
+                game.obstacles.append(Bird(BIRD))
 
         for x, dino in enumerate(dinosaurios):
             dino.draw(SCREEN)
             dino.update()
 
-            # Visión
-            if len(obstacles) > 0:
-                distancia_obstaculo = obstacles[0].rect.x - dino.dino_rect.x
-                altura_obstaculo = obstacles[0].rect.y
+            # Visión: detectar el obstáculo más cercano
+            if len(game.obstacles) > 0:
+                distancia_obstaculo = game.obstacles[0].rect.x - dino.dino_rect.x
+                altura_obstaculo = game.obstacles[0].rect.y
+                alto_obstaculo = game.obstacles[0].rect.height
             else:
                 distancia_obstaculo = 1000
                 altura_obstaculo = 0
+                alto_obstaculo = 0
 
             # Normalizar entradas para mejor aprendizaje
             # Rango: [0, 1]
             dino_y_norm = dino.dino_rect.y / SCREEN_HEIGHT
-            distancia_norm = min(distancia_obstaculo / 1000, 1.0)  # Normalizar a ~1
+            distancia_norm = min(distancia_obstaculo / 1000, 1.0)
             altura_norm = altura_obstaculo / SCREEN_HEIGHT
-            speed_norm = game_speed / 50  # Rango típico es ~20-60
+            alto_norm = alto_obstaculo / SCREEN_HEIGHT  # Tamaño vertical del obstáculo
+            speed_norm = game.speed / 50
 
             # Recompensa por avanzar en el juego
             genomas[x].fitness += 0.1
 
-            # Cerebro
+            # Cerebro: 5 entradas → 2 salidas [saltar, agacharse]
             output = redes_neuronales[x].activate(
-                (dino_y_norm, distancia_norm, altura_norm, speed_norm)
+                (dino_y_norm, distancia_norm, altura_norm, alto_norm, speed_norm)
             )
 
-            # Acción
-            if output[0] > 0.5 and not dino.dino_jump:
+            # Acción: elegir la señal más fuerte por encima de 0.5
+            saltar = output[0]
+            agacharse = output[1]
+
+            if dino.dino_jump:
+                # Si está en el aire, no puede cambiar de acción
+                pass
+            elif saltar > 0.5 and saltar >= agacharse and dino.dino_rect.y == dino.Y_POS:
+                # Saltar tiene prioridad si ambas superan 0.5 y saltar es mayor
                 dino.dino_jump = True
                 dino.dino_run = False
-            elif not dino.dino_jump:
+                dino.dino_duck = False
+            elif agacharse > 0.5:
+                # Agacharse
+                dino.dino_duck = True
+                dino.dino_run = False
+                dino.dino_jump = False
+            else:
+                # Correr (ninguna señal supera el umbral)
                 dino.dino_run = True
+                dino.dino_duck = False
+                dino.dino_jump = False
 
         # Lógica de colisión
         obstacles_to_remove = []
-        for i, obstacle in enumerate(obstacles):
+        for i, obstacle in enumerate(game.obstacles):
             obstacle.draw(SCREEN)
-            obstacle.update()
+            obstacle.update(game.speed)
 
             # Marcar obstáculos que salieron de pantalla
             if obstacle.is_off_screen():
@@ -373,12 +401,12 @@ def eval_genomes(genomes, config):
 
         # Limpiar obstáculos off-screen al final del loop
         for i in reversed(obstacles_to_remove):
-            obstacles.pop(i)
+            game.obstacles.pop(i)
 
-        background()
-        cloud.draw(SCREEN)
-        cloud.update()
-        score()
+        game.background()
+        game.cloud.draw(SCREEN)
+        game.cloud.update(game.speed)
+        game.score()
 
         clock.tick(30)
         pygame.display.update()
@@ -393,9 +421,13 @@ def run(config_path):
         config_path,
     )
 
-    # Cargar desde checkpoint SI EXISTE, si no crear población nueva
-    checkpoint_file = "neat-checkpoint-25"
-    if os.path.exists(checkpoint_file):
+    # Cargar desde el checkpoint más reciente SI EXISTE, si no crear población nueva
+    checkpoints = sorted(
+        glob.glob("neat-checkpoint-*"),
+        key=lambda f: int(f.split("-")[-1]),
+    )
+    if checkpoints:
+        checkpoint_file = checkpoints[-1]
         pop = neat.Checkpointer.restore_checkpoint(checkpoint_file)
         print(f"Cargado checkpoint: {checkpoint_file}")
     else:

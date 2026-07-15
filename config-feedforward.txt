@@ -46,8 +46,8 @@ node_delete_prob        = 0.2
 
 # Parámetros de la Red (¡Aquí están nuestros Inputs y Outputs!)
 num_hidden              = 0
-num_inputs              = 4
-num_outputs             = 1
+num_inputs              = 5
+num_outputs             = 2
 
 # Opciones de respuesta del nodo
 response_init_mean      = 1.0
