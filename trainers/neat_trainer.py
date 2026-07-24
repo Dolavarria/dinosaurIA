@@ -117,22 +117,26 @@ class GenerationMetricsReporter(neat.reporting.BaseReporter):
 # Guardado de Campeón (progresivo)
 # =========================================================================
 def _save_champion(
-    genome: neat.DefaultGenome, path: Path, reason: str
+    genome: neat.DefaultGenome,
+    path: Path,
+    reason: str,
+    force_overwrite: bool = False,
 ) -> None:
     """Guarda el genoma como campeón, solo si es mejor que el existente.
 
     Si ya existe un campeón guardado con fitness igual o superior,
-    no se sobreescribe. Esto evita perder un buen modelo por accidente.
+    no se sobreescribe (a menos que ``force_overwrite=True``).
 
     Args:
         genome: Genoma a guardar.
         path: Ruta del archivo ``.pkl`` de destino.
         reason: Motivo del guardado (se imprime en consola).
+        force_overwrite: Si es ``True``, ignora la comparación de fitness.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Si ya existe un campeón, solo sobreescribir si el nuevo es mejor
-    if path.exists():
+    # Si ya existe un campeón, solo sobreescribir si el nuevo es mejor o si es guardado forzado
+    if path.exists() and not force_overwrite:
         with open(path, "rb") as f:
             existing = pickle.load(f)
         if existing.fitness >= genome.fitness:
@@ -202,6 +206,7 @@ def eval_genomes(
                             mejor,
                             MANUAL_SAVE_PATH,
                             "Guardado manual (tecla S)",
+                            force_overwrite=True,
                         )
 
                 if event.key == pygame.K_q:
