@@ -3,3 +3,4 @@ __pycache__/
 *.pkl
 neat-checkpoint-*
 training_metrics.csv
+.agents

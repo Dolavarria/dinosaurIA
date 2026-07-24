@@ -277,7 +277,7 @@ class Game:
     def score(self):
         self.points += 1
         if self.points % 100 == 0:
-            self.speed += 2
+            self.speed = min(self.speed + 1, 40)
         text = FONT.render("Points: " + str(self.points), True, (0, 0, 0))
         textRect = text.get_rect()
         textRect.center = (1000, 40)
@@ -316,11 +316,29 @@ def eval_genomes(genomes, config):
                 run = False
                 pygame.quit()
                 quit()
+            
+            # NUEVO: Controles manuales
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_s:  # Presionar 'S' para guardar el mejor dinosaurio actual
+                    if genomas:
+                        # Encontrar el genoma con mayor fitness de los que siguen vivos
+                        mejor_genoma = max(genomas, key=lambda g: g.fitness)
+                        with open("mejor_dinosaurio_manual.pkl", "wb") as f:
+                            pickle.dump(mejor_genoma, f)
+                        print(f"¡Cerebro guardado manualmente! (Fitness: {mejor_genoma.fitness:.2f})")
+                
+                if event.key == pygame.K_q:  # Presionar 'Q' para matar a todos y pasar de generación
+                    print("Generación terminada manualmente.")
+                    dinosaurios.clear()
+                    redes_neuronales.clear()
+                    genomas.clear()
 
         SCREEN.fill((255, 255, 255))
 
-        # Generación de obstáculos
-        if len(game.obstacles) == 0:
+        # Calculamos la distancia mínima para que el dinosaurio alcance a aterrizar
+        distancia_segura = (game.speed * 21) + random.randint(50, 300)
+
+        if len(game.obstacles) == 0 or (len(game.obstacles) < 2 and game.obstacles[-1].rect.x < SCREEN_WIDTH - distancia_segura):
             obstacle_type = random.randint(0, 2)
             if obstacle_type == 0:
                 game.obstacles.append(SmallCactus(SMALL_CACTUS))
@@ -333,11 +351,17 @@ def eval_genomes(genomes, config):
             dino.draw(SCREEN)
             dino.update()
 
-            # Visión: detectar el obstáculo más cercano
-            if len(game.obstacles) > 0:
-                distancia_obstaculo = game.obstacles[0].rect.x - dino.dino_rect.x
-                altura_obstaculo = game.obstacles[0].rect.y
-                alto_obstaculo = game.obstacles[0].rect.height
+            # Visión: detectar el obstáculo más cercano que esté ADELANTE del dino
+            obstaculo_objetivo = None
+            for obs in game.obstacles:
+                if obs.rect.x + obs.rect.width > dino.dino_rect.x:
+                    obstaculo_objetivo = obs
+                    break
+            
+            if obstaculo_objetivo:
+                distancia_obstaculo = obstaculo_objetivo.rect.x - dino.dino_rect.x
+                altura_obstaculo = obstaculo_objetivo.rect.y
+                alto_obstaculo = obstaculo_objetivo.rect.height
             else:
                 distancia_obstaculo = 1000
                 altura_obstaculo = 0
@@ -381,6 +405,17 @@ def eval_genomes(genomes, config):
                 dino.dino_run = True
                 dino.dino_duck = False
                 dino.dino_jump = False
+            
+            # NUEVO: Límite automático para evitar bucles infinitos
+            if game.points >= 5000:
+                print("¡Un dinosaurio ha superado los 5000 puntos! Guardándolo y pasando a la siguiente generación.")
+                mejor_genoma = max(genomas, key=lambda g: g.fitness)
+                with open("mejor_dinosaurio_automatico.pkl", "wb") as f:
+                    pickle.dump(mejor_genoma, f)
+                dinosaurios.clear()
+                redes_neuronales.clear()
+                genomas.clear()
+                break  # Romper el for loop de los dinosaurios
 
         # Lógica de colisión
         obstacles_to_remove = []
@@ -394,7 +429,7 @@ def eval_genomes(genomes, config):
 
             for x in range(len(dinosaurios) - 1, -1, -1):
                 if dinosaurios[x].dino_rect.colliderect(obstacle.rect):
-                    genomas[x].fitness -= 1
+                    genomas[x].fitness -= 2
                     dinosaurios.pop(x)
                     redes_neuronales.pop(x)
                     genomas.pop(x)
