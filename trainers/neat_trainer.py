@@ -32,10 +32,14 @@ from game.config import SCREEN
 PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
 
 MODELS_DIR: Path = PROJECT_ROOT / "models" / "neat"
+CHECKPOINTS_DIR: Path = PROJECT_ROOT / "checkpoints" / "neat"
+METRICS_DIR: Path = PROJECT_ROOT / "metrics" / "neat"
+CONFIGS_DIR: Path = PROJECT_ROOT / "configs" / "neat"
+
 CHAMPION_PATH: Path = MODELS_DIR / "campeon.pkl"
 MANUAL_SAVE_PATH: Path = MODELS_DIR / "guardado_manual.pkl"
-CONFIG_PATH: Path = PROJECT_ROOT / "config-feedforward.txt"
-METRICS_PATH: Path = PROJECT_ROOT / "training_metrics.csv"
+CONFIG_PATH: Path = CONFIGS_DIR / "config-feedforward.txt"
+METRICS_PATH: Path = METRICS_DIR / "training_metrics.csv"
 
 # ---------------------------------------------------------------------------
 # Constantes de entrenamiento
@@ -441,8 +445,12 @@ def run_neat(generations: int = 50, force: bool = False) -> None:
         str(CONFIG_PATH),
     )
 
+    # Asegurar que existan los directorios de checkpoints y métricas
+    CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
+    METRICS_DIR.mkdir(parents=True, exist_ok=True)
+
     # Cargar desde el checkpoint más reciente SI EXISTE
-    checkpoint_pattern = str(PROJECT_ROOT / "neat-checkpoint-*")
+    checkpoint_pattern = str(CHECKPOINTS_DIR / "neat-checkpoint-*")
     checkpoints = sorted(
         glob.glob(checkpoint_pattern),
         key=lambda f: int(f.split("-")[-1]),
@@ -465,7 +473,7 @@ def run_neat(generations: int = 50, force: bool = False) -> None:
     pop.add_reporter(GenerationMetricsReporter(metrics_logger))
 
     # Checkpoint automático (cada 5 generaciones)
-    checkpoint_prefix = str(PROJECT_ROOT / "neat-checkpoint-")
+    checkpoint_prefix = str(CHECKPOINTS_DIR / "neat-checkpoint-")
     pop.add_reporter(neat.Checkpointer(5, filename_prefix=checkpoint_prefix))
 
     # Iniciar el entrenamiento

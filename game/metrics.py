@@ -25,8 +25,11 @@ class MetricsLogger:
         filename: Ruta del archivo CSV donde se guardan las métricas.
     """
 
-    def __init__(self, filename: str = "training_metrics.csv") -> None:
+    def __init__(self, filename: str = "metrics/neat/training_metrics.csv") -> None:
         self.filename = filename
+        dirname = os.path.dirname(filename)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
         self.header_written: bool = (
             os.path.exists(filename) and os.path.getsize(filename) > 0
         )
